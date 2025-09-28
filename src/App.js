@@ -10,8 +10,10 @@ export default function ExcelProcessor() {
 
     const reader = new FileReader();
     reader.onload = (evt) => {
-      const data = new Uint8Array(evt.target.result);
-      const wb = XLSX.read(data, { type: "array" });
+      const arrayBuffer = evt.target?.result;
+      if (!arrayBuffer) return;
+
+      const wb = XLSX.read(new Uint8Array(arrayBuffer), { type: "array" });
       const wsname = wb.SheetNames[0];
       const ws = wb.Sheets[wsname];
       const jsonData = XLSX.utils.sheet_to_json(ws, { defval: "" });
@@ -26,50 +28,100 @@ export default function ExcelProcessor() {
       return;
     }
 
-    // 1) مرتب‌سازی بر اساس "تالار"
     const sorted = [...data].sort((a, b) =>
       String(a["تالار"] || "").localeCompare(String(b["تالار"] || ""), "fa")
     );
 
-    // 2) جابه‌جایی کالاهای مشخص به تالار "صنعتی" بعد از مرتب‌سازی
-    const industrialKeywords = [
-      "سنگ","آهن","مس","شمش فولاد","ضایعات","پالت چوبی","بشکه خالی",
-      "ورق","پشم شیشه","کنسانتره","اقلام تجهیزات","اقلام تکمیل خودرو",
-      "سپری","تختال بتنی","تراورس"
+    // --- تعریف بلوک‌ها ---
+    const keywordsSub = [
+      "مس", "فولاد", "ضایعات", "پالت چوبی", "بشکه خالی", "ورق",
+      "پشم شیشه", "کنسانتره", "اقلام تجهیزات", "اقلام تکمیل خودرو",
+      "سپری", "تختال", "بتنی"
     ];
 
-    const processed = sorted.map((row) => {
-      const name = row["نام کالا"] ? String(row["نام کالا"]).trim() : "";
-      const hasAuctionAndSub = row["تالار"] === "حراج باز" 
-                               && row["تالار فرعی"] !== undefined 
-                               && row["تالار فرعی"] !== null 
-                               && String(row["تالار فرعی"]).trim() !== "";
-      const isIndustrial = industrialKeywords.some(keyword => name.includes(keyword));
+    const mainRows = [];
+    const keywordBlockSub = [];
+    const keywordBlockPetroleumFromSub = [];
+    const auctionBlockStoneOrCathode = [];
+    const auctionBlockVacuum = [];
 
-      if (hasAuctionAndSub && isIndustrial) {
-        return { ...row, "تالار": "صنعتی" };
+    sorted.forEach((row) => {
+      const curTalar = row["تالار"] || "";
+      const namaKala = row["نام کالا"] || "";
+
+      // بلوک تالار فرعی
+      if (curTalar === "تالار فرعی") {
+        if (["نفتی", "نفت", "وکیوم", "قیر", "روغن"].some(kw => namaKala.includes(kw))) {
+          keywordBlockPetroleumFromSub.push(row);
+        } else if (keywordsSub.some(kw => namaKala.includes(kw))) {
+          keywordBlockSub.push(row);
+        }
       }
-      return row;
+      // تالار حراج باز که نام کالا شامل "سنگ" یا "مس کاتد" است
+      else if (curTalar === "تالار حراج باز" &&
+               (namaKala.includes("سنگ") || namaKala.includes("مس کاتد"))) {
+        auctionBlockStoneOrCathode.push(row);
+      }
+      // تالار حراج باز که نام کالا شامل "وکیوم" است
+      else if (curTalar === "تالار حراج باز" && namaKala.includes("وکیوم")) {
+        auctionBlockVacuum.push(row);
+      }
+      // سایر ردیف‌ها
+      else {
+        mainRows.push(row);
+      }
     });
 
-    // 3) اضافه کردن ردیف خالی بین تغییر تالارها
-    const finalRows = [];
-    let prevTalar = null;
-    processed.forEach((row) => {
-      const cur = row["تالار"] || "";
-      if (prevTalar !== null && cur !== prevTalar) {
-        finalRows.push({});
+    // --- پیدا کردن آخرین تالار صنعتی ---
+    let industrialIndex = mainRows.map(r => r["تالار"] || "").lastIndexOf("تالار صنعتی");
+    if (industrialIndex === -1) industrialIndex = mainRows.length - 1;
+
+    // --- اضافه کردن بلوک تالار فرعی زیر صنعتی ---
+    const finalRows = [...mainRows];
+    if (keywordBlockSub.length > 0) {
+      finalRows.splice(industrialIndex + 1, 0, ...keywordBlockSub);
+      industrialIndex += keywordBlockSub.length;
+    }
+
+    // --- اضافه کردن بلوک ردیف‌های "سنگ یا مس کاتد" زیر صنعتی ---
+    if (auctionBlockStoneOrCathode.length > 0) {
+      finalRows.splice(industrialIndex + 1, 0, ...auctionBlockStoneOrCathode);
+      industrialIndex += auctionBlockStoneOrCathode.length;
+    }
+
+    // --- اضافه کردن بلوک ردیف‌های "وکیوم" تالار حراج ---
+    let petroleumIndex = finalRows.map(r => r["تالار"] || "").lastIndexOf("تالار فرآورده های نفتی");
+    if (petroleumIndex === -1) petroleumIndex = finalRows.length - 1;
+
+    if (auctionBlockVacuum.length > 0) {
+      finalRows.splice(petroleumIndex + 1, 0, ...auctionBlockVacuum);
+      petroleumIndex += auctionBlockVacuum.length;
+    }
+
+    // --- اضافه کردن بلوک ردیف‌های نفتی از تالار فرعی زیر تالار فرآورده های نفتی ---
+    if (keywordBlockPetroleumFromSub.length > 0) {
+      finalRows.splice(petroleumIndex + 1, 0, ...keywordBlockPetroleumFromSub);
+      petroleumIndex += keywordBlockPetroleumFromSub.length;
+    }
+
+    // --- اضافه کردن insert بعد از هر تالار ---
+    const processed = [];
+    let currentTalar = null;
+    finalRows.forEach(row => {
+      const curTalar = row["تالار"] || "";
+      if (curTalar !== currentTalar && currentTalar !== null) {
+        processed.push({}); // insert بعد از اتمام هر تالار
       }
-      finalRows.push(row);
-      prevTalar = cur;
+      processed.push(row);
+      currentTalar = curTalar;
     });
 
-    // 4) محاسبه unionِ headerها
+    // --- محاسبه union headerها ---
     const headerSet = new Set();
-    finalRows.forEach((r) => Object.keys(r).forEach((k) => headerSet.add(k)));
+    processed.forEach((r) => Object.keys(r).forEach((k) => headerSet.add(k)));
     const headersArr = Array.from(headerSet);
 
-    // 5) ترتیب ستون‌ها (تولیدکننده قبل از محل تحویل)
+    // ترتیب ستون‌ها
     const producer = "تولید کننده کالا";
     const delivery = "محل تحویل";
     if (headersArr.includes(producer) && headersArr.includes(delivery)) {
@@ -80,38 +132,35 @@ export default function ExcelProcessor() {
       withoutProducer.forEach((h) => headersArr.push(h));
     }
 
-    // 6) اضافه کردن ستون "مقدار پایه" بعد از "قیمت"
+    // اضافه کردن مقدار پایه
     const priceIdx = headersArr.indexOf("قیمت");
-    if (priceIdx !== -1) {
-      headersArr.splice(priceIdx + 1, 0, "مقدار پایه");
-    }
+    if (priceIdx !== -1) headersArr.splice(priceIdx + 1, 0, "مقدار پایه");
 
-    // 7) حذف ستون‌های "حجم" و "تعداد محموله"
-    ["حجم", "تعداد محموله"].forEach((col) => {
+    // حذف ستون‌های غیرضروری
+    ["حجم", "تعداد محموله"].forEach(col => {
       const idx = headersArr.indexOf(col);
       if (idx !== -1) headersArr.splice(idx, 1);
     });
 
-    // 8) بازسازی ردیف‌ها با پر کردن مقادیر خالی + محاسبه مقدار پایه
-    const reordered = finalRows.map((row) => {
+    // بازسازی ردیف‌ها
+    const reordered = processed.map(row => {
       const nr = {};
-      headersArr.forEach((h) => {
+      headersArr.forEach(h => {
         if (h === "مقدار پایه") {
-          const volume = row && row["حجم"] ? parseFloat(row["حجم"]) : 0;
+          const volume = row?.حجم ? parseFloat(row["حجم"]) : 0;
           nr[h] = volume ? volume / 1000 : "";
         } else {
-          nr[h] = row && Object.prototype.hasOwnProperty.call(row, h) ? row[h] : "";
+          nr[h] = row?.[h] ?? "";
         }
       });
       return nr;
     });
 
-    // 9) تبدیل به sheet و دانلود
+    // ساخت فایل Excel
     const ws = XLSX.utils.json_to_sheet(reordered, { header: headersArr, skipHeader: false });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "نتیجه");
-    if (!wb.Workbook) wb.Workbook = {};
-    if (!wb.Workbook.Views) wb.Workbook.Views = [{}];
+    wb.Workbook = wb.Workbook || { Views: [{}] };
     wb.Workbook.Views[0].RTL = true;
     ws["!rtl"] = true;
 
