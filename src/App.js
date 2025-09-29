@@ -35,85 +35,98 @@ export default function ExcelProcessor() {
     // --- تعریف بلوک‌ها ---
     const keywordsSub = [
       "مس", "فولاد", "ضایعات", "پالت چوبی", "بشکه خالی", "ورق",
-      "پشم شیشه", "کنسانتره", "اقلام تجهیزات", "اقلام تکمیل خودرو",
+      "پشم شیشه", "کنسانتره", "اقلام تجهیزات", "اقلام تکمیل خودرو","شمش",
       "سپری", "تختال", "بتنی"
     ];
+    const petrochemKeywords = ["پلی", "الیاف استیپل اکریلیک"];
 
-    const mainRows = [];
-    const keywordBlockSub = [];
-    const keywordBlockPetroleumFromSub = [];
-    const auctionBlockStoneOrCathode = [];
-    const auctionBlockVacuum = [];
+    const blocks = {
+      keywordBlockSub: [],
+      keywordBlockPetroleumFromSub: [],
+      auctionBlockStoneOrCathode: [],
+      auctionBlockVacuum: [],
+      petrochemBlock: [],
+      otherRows: []
+    };
 
     sorted.forEach((row) => {
       const curTalar = row["تالار"] || "";
       const namaKala = row["نام کالا"] || "";
 
-      // بلوک تالار فرعی
       if (curTalar === "تالار فرعی") {
         if (["نفتی", "نفت", "وکیوم", "قیر", "روغن"].some(kw => namaKala.includes(kw))) {
-          keywordBlockPetroleumFromSub.push(row);
+          blocks.keywordBlockPetroleumFromSub.push(row);
         } else if (keywordsSub.some(kw => namaKala.includes(kw))) {
-          keywordBlockSub.push(row);
+          blocks.keywordBlockSub.push(row);
+        } else if (petrochemKeywords.some(kw => namaKala.includes(kw))) {
+          blocks.petrochemBlock.push(row);
+        } else {
+          blocks.otherRows.push(row);
         }
-      }
-      // تالار حراج باز که نام کالا شامل "سنگ" یا "مس کاتد" است
-      else if (curTalar === "تالار حراج باز" &&
-               (namaKala.includes("سنگ") || namaKala.includes("مس کاتد"))) {
-        auctionBlockStoneOrCathode.push(row);
-      }
-      // تالار حراج باز که نام کالا شامل "وکیوم" است
-      else if (curTalar === "تالار حراج باز" && namaKala.includes("وکیوم")) {
-        auctionBlockVacuum.push(row);
-      }
-      // سایر ردیف‌ها
-      else {
-        mainRows.push(row);
+      } else if (curTalar === "تالار حراج باز") {
+        if (namaKala.includes("سنگ") || namaKala.includes("مس کاتد")) {
+          blocks.auctionBlockStoneOrCathode.push(row);
+        } else if (namaKala.includes("وکیوم")) {
+          blocks.auctionBlockVacuum.push(row);
+        } else if (petrochemKeywords.some(kw => namaKala.includes(kw))) {
+          blocks.petrochemBlock.push(row);
+        } else {
+          blocks.otherRows.push(row);
+        }
+      } else {
+        blocks.otherRows.push(row);
       }
     });
 
-    // --- پیدا کردن آخرین تالار صنعتی ---
-    let industrialIndex = mainRows.map(r => r["تالار"] || "").lastIndexOf("تالار صنعتی");
-    if (industrialIndex === -1) industrialIndex = mainRows.length - 1;
+    // --- شروع ترکیب نهایی ---
+    const finalRows = [...blocks.otherRows];
 
-    // --- اضافه کردن بلوک تالار فرعی زیر صنعتی ---
-    const finalRows = [...mainRows];
-    if (keywordBlockSub.length > 0) {
-      finalRows.splice(industrialIndex + 1, 0, ...keywordBlockSub);
-      industrialIndex += keywordBlockSub.length;
+    let industrialIndex = finalRows.map(r => r["تالار"] || "").lastIndexOf("تالار صنعتی");
+    if (industrialIndex === -1) industrialIndex = finalRows.length - 1;
+    if (blocks.keywordBlockSub.length > 0) {
+      finalRows.splice(industrialIndex + 1, 0, ...blocks.keywordBlockSub);
+      industrialIndex += blocks.keywordBlockSub.length;
+    }
+    if (blocks.auctionBlockStoneOrCathode.length > 0) {
+      finalRows.splice(industrialIndex + 1, 0, ...blocks.auctionBlockStoneOrCathode);
+      industrialIndex += blocks.auctionBlockStoneOrCathode.length;
     }
 
-    // --- اضافه کردن بلوک ردیف‌های "سنگ یا مس کاتد" زیر صنعتی ---
-    if (auctionBlockStoneOrCathode.length > 0) {
-      finalRows.splice(industrialIndex + 1, 0, ...auctionBlockStoneOrCathode);
-      industrialIndex += auctionBlockStoneOrCathode.length;
-    }
-
-    // --- اضافه کردن بلوک ردیف‌های "وکیوم" تالار حراج ---
     let petroleumIndex = finalRows.map(r => r["تالار"] || "").lastIndexOf("تالار فرآورده های نفتی");
     if (petroleumIndex === -1) petroleumIndex = finalRows.length - 1;
-
-    if (auctionBlockVacuum.length > 0) {
-      finalRows.splice(petroleumIndex + 1, 0, ...auctionBlockVacuum);
-      petroleumIndex += auctionBlockVacuum.length;
+    if (blocks.auctionBlockVacuum.length > 0) {
+      finalRows.splice(petroleumIndex + 1, 0, ...blocks.auctionBlockVacuum);
+      petroleumIndex += blocks.auctionBlockVacuum.length;
+    }
+    if (blocks.keywordBlockPetroleumFromSub.length > 0) {
+      finalRows.splice(petroleumIndex + 1, 0, ...blocks.keywordBlockPetroleumFromSub);
+      petroleumIndex += blocks.keywordBlockPetroleumFromSub.length;
     }
 
-    // --- اضافه کردن بلوک ردیف‌های نفتی از تالار فرعی زیر تالار فرآورده های نفتی ---
-    if (keywordBlockPetroleumFromSub.length > 0) {
-      finalRows.splice(petroleumIndex + 1, 0, ...keywordBlockPetroleumFromSub);
-      petroleumIndex += keywordBlockPetroleumFromSub.length;
+    let petroIndex = finalRows.map(r => r["تالار"] || "").lastIndexOf("تالار پتروشیمی");
+    if (petroIndex === -1) petroIndex = finalRows.length - 1;
+    if (blocks.petrochemBlock.length > 0) {
+      finalRows.splice(petroIndex + 1, 0, ...blocks.petrochemBlock);
+      petroIndex += blocks.petrochemBlock.length;
     }
 
-    // --- اضافه کردن insert بعد از هر تالار ---
+    // --- اضافه کردن insert فقط قبل از اولین ردیف تالارهای مشخص ---
+    const insertTalarNames = [
+      "تالار صنعتی",
+      "تالار فرآورده های نفتی",
+      "تالار کالای صادراتی کيش"
+    ];
+
     const processed = [];
-    let currentTalar = null;
+    const inserted = new Set();
+
     finalRows.forEach(row => {
       const curTalar = row["تالار"] || "";
-      if (curTalar !== currentTalar && currentTalar !== null) {
-        processed.push({}); // insert بعد از اتمام هر تالار
+      if (insertTalarNames.includes(curTalar) && !inserted.has(curTalar)) {
+        processed.push({}); // insert قبل از اولین ردیف تالار مشخص
+        inserted.add(curTalar);
       }
       processed.push(row);
-      currentTalar = curTalar;
     });
 
     // --- محاسبه union headerها ---
@@ -137,18 +150,16 @@ export default function ExcelProcessor() {
     if (priceIdx !== -1) headersArr.splice(priceIdx + 1, 0, "مقدار پایه");
 
     // حذف ستون‌های غیرضروری
-    ["حجم", "تعداد محموله"].forEach(col => {
-      const idx = headersArr.indexOf(col);
-      if (idx !== -1) headersArr.splice(idx, 1);
-    });
+    const excludedColumns = ["حجم", "تعداد محموله"];
+    const filteredHeaders = headersArr.filter(h => !excludedColumns.includes(h));
 
     // بازسازی ردیف‌ها
     const reordered = processed.map(row => {
       const nr = {};
-      headersArr.forEach(h => {
+      filteredHeaders.forEach(h => {
         if (h === "مقدار پایه") {
-          const volume = row?.حجم ? parseFloat(row["حجم"]) : 0;
-          nr[h] = volume ? volume / 1000 : "";
+          const volume = parseFloat(row?.["حجم"]);
+          nr[h] = !isNaN(volume) ? volume / 1000 : "";
         } else {
           nr[h] = row?.[h] ?? "";
         }
@@ -157,14 +168,16 @@ export default function ExcelProcessor() {
     });
 
     // ساخت فایل Excel
-    const ws = XLSX.utils.json_to_sheet(reordered, { header: headersArr, skipHeader: false });
+    const ws = XLSX.utils.json_to_sheet(reordered, { header: filteredHeaders, skipHeader: false });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "نتیجه");
     wb.Workbook = wb.Workbook || { Views: [{}] };
     wb.Workbook.Views[0].RTL = true;
     ws["!rtl"] = true;
 
-    XLSX.writeFile(wb, "خروجی.xlsx");
+    // اسم فایل خروجی با تاریخ
+    const dateStr = new Date().toLocaleDateString("fa-IR").replace(/\//g, "-");
+    XLSX.writeFile(wb, `خروجی-${dateStr}.xlsx`);
   };
 
   return (
@@ -178,7 +191,7 @@ export default function ExcelProcessor() {
         onChange={handleFileUpload}
       />
 
-      <button className="btn btn-primary" onClick={processData}>
+      <button className="btn btn-primary" onClick={processData} disabled={data.length === 0}>
         پردازش و دانلود خروجی
       </button>
     </div>
