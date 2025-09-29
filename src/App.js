@@ -114,7 +114,8 @@ export default function ExcelProcessor() {
     const insertTalarNames = [
       "تالار صنعتی",
       "تالار فرآورده های نفتی",
-      "تالار کالای صادراتی کيش"
+      "تالار کالای صادراتی کيش",
+      "تالار حراج همزمان",
     ];
 
     const processed = [];
