@@ -59,8 +59,8 @@ export default function ExcelProcessor() {
 
     const keywordsSub = [
       "مس", "فولاد", "ضایعات", "پالت چوبی", "بشکه خالی", "ورق",
-      "پشم شیشه", "کنسانتره", "اقلام تجهیزات", "اقلام تکمیل خودرو",
-      "شمش", "سپری", "تختال", "بتنی"
+      "پشم شیشه", "کنسانتره", "اقلام تجهیزات", "اقلام تکمیلی خودرو",
+      "شمش", "سپری", "تختال", "بتنی","گرانول نقره","فلز",
     ];
     const petrochemKeywords = ["پلی", "الیاف استیپل اکریلیک"];
 
@@ -77,6 +77,12 @@ export default function ExcelProcessor() {
       const curTalar = row["تالار"] || "";
       const namaKala = row["نام کالا"] || "";
 
+      // استثناء جهانی: اگر پلیمریک → حتماً پتروشیمی
+      if (namaKala.includes("پلیمریک")) {
+        blocks.petrochemBlock.push(row);
+        return;
+      }
+
       if (curTalar === "تالار فرعی") {
         if (["نفتی", "نفت", "وکیوم", "قیر", "روغن"].some(kw => namaKala.includes(kw))) {
           blocks.keywordBlockPetroleumFromSub.push(row);
@@ -86,14 +92,16 @@ export default function ExcelProcessor() {
           blocks.petrochemBlock.push(row);
         } else blocks.petrochemBlock.push(row);
       } else if (curTalar === "تالار حراج باز") {
-        if (namaKala.includes("سنگ") || namaKala.includes("مس کاتد")) {
+        if (namaKala.includes("سنگ") || namaKala.includes("مس کاتد") || namaKala.includes("فلز") ) {
           blocks.auctionBlockStoneOrCathode.push(row);
         } else if (namaKala.includes("وکیوم")) {
           blocks.auctionBlockVacuum.push(row);
         } else if (petrochemKeywords.some(kw => namaKala.includes(kw))) {
           blocks.petrochemBlock.push(row);
         } else blocks.petrochemBlock.push(row);
-      } else blocks.otherRows.push(row);
+      } else {
+        blocks.otherRows.push(row);
+      }
     });
 
     const finalRows = [...blocks.otherRows];
@@ -129,7 +137,7 @@ export default function ExcelProcessor() {
     const insertTalarNames = [
       "تالار صنعتی",
       "تالار فرآورده های نفتی",
-      "تالار حراج همزمان",
+      "تالار سیمان",
       "تالار کالای صادراتی کيش",
     ];
     let processed = [];
@@ -164,7 +172,7 @@ export default function ExcelProcessor() {
       if (isInsert) {
         if (currentBlock.length > 0) {
           currentBlock.sort((a, b) => {
-            if ((a["تالار"] || "") === "تالار حراج همزمان" && (b["تالار"] || "") === "تالار حراج همزمان") {
+            if ((a["تالار"] || "") === "تالار سیمان " && (b["تالار"] || "") === "تالار سیمان ") {
               return String(a["تولید کننده کالا"] || "").localeCompare(String(b["تولید کننده کالا"] || ""), "fa");
             }
             return String(a["نام کالا"] || "").localeCompare(String(b["نام کالا"] || ""), "fa");
@@ -180,7 +188,7 @@ export default function ExcelProcessor() {
     });
     if (currentBlock.length > 0) {
       currentBlock.sort((a, b) => {
-        if ((a["تالار"] || "") === "تالار حراج همزمان" && (b["تالار"] || "") === "تالار حراج همزمان") {
+        if ((a["تالار"] || "") === "تالار سیمان" && (b["تالار"] || "") === "تالار سیمان") {
           return String(a["تولید کننده کالا"] || "").localeCompare(String(b["تولید کننده کالا"] || ""), "fa");
         }
         return String(a["نام کالا"] || "").localeCompare(String(b["نام کالا"] || ""), "fa");
@@ -188,16 +196,18 @@ export default function ExcelProcessor() {
       blocksSorted.push({ __HEADER__: true });
       blocksSorted.push(...currentBlock);
     }
-
     let headersArr = Array.from(new Set(blocksSorted.flatMap(r => Object.keys(r)))).filter(
-      h => h !== "تالار" && h !== "تاریخ عرضه" && h !== "__HEADER__" && h !== "تعداد محموله" && h !== "قیمت پایه"
+      h => h !== "تاریخ عرضه" && h !== "__HEADER__" && h !== "تعداد محموله" && h !== "قیمت پایه"
     );
-
-    // تغییر نام ستون حجم به مقدار پایه
-    headersArr = headersArr.map(h => (h === "حجم" ? "مقدار پایه" : h));
-
-    // تغییر نام ستون قیمت به قیمت پایه
-    headersArr = headersArr.map(h => (h === "قیمت" ? "قیمت پایه" : h));
+    // تغییر نام ستون‌ها
+    headersArr = headersArr.map(h => {
+      if (h === "حجم") return "مقدار پایه";
+      if (h === "قیمت") return "قیمت پایه";
+      if (h === "کد") return "کد عرضه";
+      if (h === "تسویه") return "نوع تسویه";
+      if (h === "حداکثر افزایش حجم سفارش") return "حداکثر افزایش عرضه";
+      return h;
+    });
 
     const producer = "تولید کننده کالا", delivery = "محل تحویل";
     if (headersArr.includes(producer) && headersArr.includes(delivery)) {
@@ -211,14 +221,20 @@ export default function ExcelProcessor() {
       if (row.__HEADER__) return row;
       const nr = {};
       headersArr.forEach(h => {
-        let originalKey = h === "مقدار پایه" ? "حجم" : h === "قیمت پایه" ? "قیمت" : h;
+        let originalKey =
+          h === "مقدار پایه" ? "حجم" :
+          h === "قیمت پایه" ? "قیمت" :
+          h === "کد عرضه" ? "کد" :
+          h === "نوع تسویه" ? "تسویه" :
+          h === "حداکثر افزایش عرضه" ? "حداکثر افزایش حجم سفارش" :
+          h;
         let value = row[originalKey] ?? "";
         if (h === "مقدار پایه") {
           const vol = Number(value);
           nr[h] = isNaN(vol) ? "" : vol / 1000;
         } else if (h === "قیمت پایه") {
           const price = Number(value);
-          nr[h] = isNaN(price) ? "" : price.toLocaleString("en-US"); // جداکننده هزارگانه
+          nr[h] = isNaN(price) ? "" : price.toLocaleString("en-US");
         } else {
           nr[h] = value;
         }
