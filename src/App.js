@@ -172,7 +172,7 @@ export default function ExcelProcessor() {
       if (isInsert) {
         if (currentBlock.length > 0) {
           currentBlock.sort((a, b) => {
-            if ((a["تالار"] || "") === "تالار سیمان " && (b["تالار"] || "") === "تالار سیمان ") {
+            if ((a["تالار"] || "") === "تالار سیمان" && (b["تالار"] || "") === "تالار سیمان") {
               return String(a["تولید کننده کالا"] || "").localeCompare(String(b["تولید کننده کالا"] || ""), "fa");
             }
             return String(a["نام کالا"] || "").localeCompare(String(b["نام کالا"] || ""), "fa");
@@ -196,6 +196,7 @@ export default function ExcelProcessor() {
       blocksSorted.push({ __HEADER__: true });
       blocksSorted.push(...currentBlock);
     }
+
     let headersArr = Array.from(new Set(blocksSorted.flatMap(r => Object.keys(r)))).filter(
       h => h !== "تاریخ عرضه" && h !== "__HEADER__" && h !== "تعداد محموله" && h !== "قیمت پایه"
     );
