@@ -231,48 +231,60 @@ export default function ExcelProcessor() {
     });
 
     // --- بلوک‌های ویژه انتهایی ---
-    const addSpecialBlock=(rows)=>{
+    const addSpecialBlock=(rows)=> {
       if(rows.length>0){
         reordered.push({__HEADER__:true});
         rows.forEach(r=>reordered.push({...r}));
       }
     };
 
-    // پلی + بطری
+    // بلوک‌های قبلی (پلی و سبک/سنگین و ...) بدون تغییر
     addSpecialBlock(reordered.filter(r=>r["نام کالا"]?.includes("پلی") && r["نام کالا"]?.includes("بطری")));
-
-    // پلی + نساجی
     addSpecialBlock(reordered.filter(r=>r["نام کالا"]?.includes("پلی") && r["نام کالا"]?.includes("نساجی") && !r["نام کالا"]?.toLowerCase().includes("off")));
     addSpecialBlock(reordered.filter(r=>r["نام کالا"]?.includes("پلی") && r["نام کالا"]?.includes("نساجی") && r["نام کالا"]?.toLowerCase().includes("off")));
-
-    // پلی + شیمیایی
     addSpecialBlock(reordered.filter(r=>r["نام کالا"]?.includes("پلی") && r["نام کالا"]?.includes("شیمیایی") && !r["نام کالا"]?.toLowerCase().includes("off")));
     addSpecialBlock(reordered.filter(r=>r["نام کالا"]?.includes("پلی") && r["نام کالا"]?.includes("شیمیایی") && r["نام کالا"]?.toLowerCase().includes("off")));
     addSpecialBlock(reordered.filter(r=>r["نام کالا"]?.includes("پلی") && r["نام کالا"]?.includes("وینیل") && r["نام کالا"]?.includes("کلراید")&& r["نام کالا"]?.includes("S")));
     addSpecialBlock(reordered.filter(r=>r["نام کالا"]?.includes("پلی") && r["نام کالا"]?.includes("وینیل") && r["نام کالا"]?.includes("کلراید")&& r["نام کالا"]?.includes("E")));
     addSpecialBlock(reordered.filter(r=>r["نام کالا"]?.includes("پلی") && r["نام کالا"]?.includes("استایرن"))) ;
-
-
-    // پلی + سبک
+    addSpecialBlock(reordered.filter(r=>r["نام کالا"]?.includes("منو اتیلن گلایکول") || r["نام کالا"]?.includes("دی اتیلن گلایکول")));
+    addSpecialBlock(reordered.filter(r=>r["نام کالا"]?.includes("تری اتیلن گلایکول"))) ;
+    addSpecialBlock(reordered.filter(r=>r["نام کالا"]?.includes("اسید ترفتالیک"))) ;
     addSpecialBlock(reordered.filter(r=>r["نام کالا"]?.includes("پلی") && r["نام کالا"]?.includes("سبک") && r["نام کالا"]?.includes("تزریقی") && !r["نام کالا"]?.toLowerCase().includes("off")));
     addSpecialBlock(reordered.filter(r=>r["نام کالا"]?.includes("پلی") && r["نام کالا"]?.includes("سبک") && r["نام کالا"]?.includes("خطی") && !r["نام کالا"]?.toLowerCase().includes("off")));
     addSpecialBlock(reordered.filter(r=>r["نام کالا"]?.includes("پلی") && r["نام کالا"]?.includes("سبک") && r["نام کالا"]?.includes("فیلم") && !r["نام کالا"]?.toLowerCase().includes("off")));
     addSpecialBlock(reordered.filter(r=>r["نام کالا"]?.includes("پلی") && r["نام کالا"]?.includes("سبک") && r["نام کالا"]?.toLowerCase().includes("off")));
-
-    // پلی + سنگین (اکستروژن یا لوله) بدون off
     addSpecialBlock(reordered.filter(r=>r["نام کالا"]?.includes("پلی") && r["نام کالا"]?.includes("سنگین") &&
       (r["نام کالا"]?.includes("اکستروژن") || r["نام کالا"]?.includes("لوله")) && !r["نام کالا"]?.toLowerCase().includes("off")));
-      addSpecialBlock(reordered.filter(r=>r["نام کالا"]?.includes("پلی") && r["نام کالا"]?.includes("سنگین") &&
+    addSpecialBlock(reordered.filter(r=>r["نام کالا"]?.includes("پلی") && r["نام کالا"]?.includes("سنگین") &&
       (r["نام کالا"]?.includes("PEWAX") || r["نام کالا"]?.includes("کلوخه")) && !r["نام کالا"]?.toLowerCase().includes("off")));
-    // بلوک‌های سنگین دیگر بدون off
     ["بادی","تزریقی","فیلم","دورانی"].forEach(k=>{
       addSpecialBlock(reordered.filter(r=>r["نام کالا"]?.includes("پلی") && r["نام کالا"]?.includes("سنگین") &&
         r["نام کالا"]?.includes(k) && !r["نام کالا"]?.toLowerCase().includes("off")));
     });
-
-    // تمام off‌ها سنگین در یک بلوک
     addSpecialBlock(reordered.filter(r=>r["نام کالا"]?.includes("پلی") && r["نام کالا"]?.includes("سنگین") &&
       r["نام کالا"]?.toLowerCase().includes("off")));
+
+    // --- بلوک ویژه تولوئن / متیلن --- 
+    const newSpecialRows = reordered.filter(r => 
+      r["نام کالا"]?.includes("تولوئن دی ایزو سیانات") || 
+      r["نام کالا"]?.includes("متیلن دی فنیل دی ایزوسیانات")||
+      r["نام کالا"]?.includes("متیلن دی فنیل ایزوسیانات")
+
+    );
+
+    if(newSpecialRows.length > 0){
+      reordered.push({__HEADER__:true});
+      const excludeColumns = ["کد عرضه", "تولید کننده کالا", "محل تحویل", "حداقل خرید"];
+      const specialHeaders = headersArr.filter(h => !excludeColumns.includes(h));
+
+      newSpecialRows.forEach(r=>{
+        const rowData = specialHeaders.map(h => r[h] ?? "");
+        const newRow = {};
+        specialHeaders.forEach((h,i)=>{ newRow[h] = rowData[i]; });
+        reordered.push(newRow);
+      });
+    }
 
     // --- تولید اکسل ---
     const workbook=new ExcelJS.Workbook();
